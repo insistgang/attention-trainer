@@ -1,0 +1,125 @@
+# MiniMax Coding Plan API Key Research Report
+# Generated: 2026-03-25
+
+## CRITICAL FINDING: Key Was Truncated
+
+The team message provided a TRUNCATED API key (94 characters).
+The ACTUAL full key is 125 characters:
+
+  FULL KEY:
+  sk-cp-gc1eL7Zo5imTDlZtYcyOnd28ADoc7J3LZfbc-sR0dGRVvoAAjY7_ZBtCyBh2tzNlww9MYdbZ-TGg9rHgNiJ4rB67rR97VJFjlGC-QUgqPMEs_ALiNt17vrs
+
+  TRUNCATED (from team message, 94 chars):
+  sk-cp-gc1eL7Zo5imTDlZtYcyOnd28ADoc7J3LZfbc-sR0dGRVvoAAjY7_ZBtCyBh2tzNlww9MYdbZ-TGg9rHgNiJ4rB67
+
+The missing suffix is: rR97VJFjlGC-QUgqPMEs_ALiNt17vrs
+
+This is why all endpoints returned 1004 "login fail" - the key was incomplete.
+
+---
+
+## Verified Working Endpoints (with full 125-char key)
+
+### 1. Text Chat Completion (Standard MiniMax API)
+   URL:    POST https://api.minimaxi.com/v1/text/chatcompletion_v2
+   Auth:   Authorization: Bearer <FULL_KEY>
+   Body:   {"model":"MiniMax-M2.7","messages":[{"role":"user","content":"Hi"}]}
+   Result: HTTP 200 - {"base_resp":{"status_code":0,"status_msg":""}}
+   Response: "Hello! How can I help you today?"
+
+### 2. Anthropic-Compatible API (RECOMMENDED for Claude Code)
+   URL:    POST https://api.minimaxi.com/anthropic/v1/messages
+   Auth:   Authorization: Bearer <FULL_KEY>
+   Headers: anthropic-version: 2023-06-01
+   Body:   {"model":"MiniMax-M2.7","max_tokens":50,"messages":[{"role":"user","content":[{"type":"text","text":"Hi"}]}]}
+   Result: HTTP 200 - Works perfectly
+
+### 3. Coding Plan Search (Web Search)
+   URL:    POST https://api.minimaxi.com/v1/coding_plan/search
+   Auth:   Authorization: Bearer <FULL_KEY>
+   Headers: MM-API-Source: Minimax-MCP
+   Body:   {"q":"what is AI"}
+   Result: HTTP 200 - Returns Google-style search results
+   Note:   Only works on api.minimaxi.com, NOT on api.minimaxi.chat
+
+### 4. Coding Plan VLM (Image Understanding)
+   URL:    POST https://api.minimaxi.com/v1/coding_plan/vlm
+   Auth:   Authorization: Bearer <FULL_KEY>
+   Headers: MM-API-Source: Minimax-MCP
+   Body:   {"prompt":"describe this image","image_url":"data:image/png;base64,..."}
+   Result: HTTP 200 - Returns image description
+   Note:   Only accepts base64 data URLs, not HTTP image URLs
+
+---
+
+## Key Format Analysis
+
+- Prefix: sk-cp- (sk = secret key, cp = Coding Plan)
+- Format: URL-safe base64 characters with hyphen separators
+- Length: 125 characters total
+- The key is the same for both MINIMAX_API_KEY and ANTHROPIC_AUTH_TOKEN env vars
+
+---
+
+## Domain Endpoints Tested
+
+| Domain                    | Status            | Notes                           |
+|---------------------------|-------------------|---------------------------------|
+| api.minimaxi.com          | WORKS             | Primary endpoint                |
+| api.minimaxi.chat         | PARTIAL           | Text APIs work, coding_plan returns 2049 |
+| api.minimax.com           | Unreachable       | Connection refused              |
+
+---
+
+## Installed MCP Server: minimax-coding-plan-mcp
+
+The system has the MiniMax Coding Plan MCP server installed:
+- Package: minimax-coding-plan-mcp v0.0.4
+- Entry: minimax-coding-plan-mcp
+- Uses: MINIMAX_API_KEY and MINIMAX_API_HOST env vars
+- API host should be: https://api.minimaxi.com
+- Provides: web_search, understand_image tools
+
+---
+
+## Correct Configuration
+
+### Environment Variables (already set in environment):
+  MINIMAX_API_KEY=sk-cp-gc1eL7Zo5imTDlZtYcyOnd28ADoc7J3LZfbc-sR0dGRVvoAAjY7_ZBtCyBh2tzNlww9MYdbZ-TGg9rHgNiJ4rB67rR97VJFjlGC-QUgqPMEs_ALiNt17vrs
+  ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+  ANTHROPIC_AUTH_TOKEN=sk-cp-gc1eL7Zo5imTDlZtYcyOnd28ADoc7J3LZfbc-sR0dGRVvoAAjY7_ZBtCyBh2tzNlww9MYdbZ-TGg9rHgNiJ4rB67rR97VJFjlGC-QUgqPMEs_ALiNt17vrs
+
+### Claude Code Setup (from docs):
+  ANTHROPIC_BASE_URL: https://api.minimaxi.com/anthropic
+  ANTHROPIC_AUTH_TOKEN: <FULL_KEY>
+  ANTHROPIC_MODEL: MiniMax-M2.7
+
+### MCP Server Setup:
+  MINIMAX_API_KEY=<FULL_KEY>
+  MINIMAX_API_HOST=https://api.minimaxi.com
+
+---
+
+## Error Codes Reference
+
+| Code | Meaning                          |
+|------|----------------------------------|
+| 0    | Success                          |
+| 1004 | login fail (invalid/missing key) |
+| 2013 | invalid params                   |
+| 2049 | invalid api key (wrong domain)   |
+
+---
+
+## Conclusion
+
+The sk-cp- key is a valid MiniMax Token/Coding Plan subscription key.
+It works on:
+- Standard text chat: POST /v1/text/chatcompletion_v2
+- Anthropic-compatible: POST /v1/anthropic/messages
+- Web search: POST /v1/coding_plan/search
+- Image understanding: POST /v1/coding_plan/vlm
+
+The key ONLY works on the api.minimaxi.com domain (NOT api.minimaxi.chat).
+
+[DONE]
