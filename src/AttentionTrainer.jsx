@@ -454,13 +454,12 @@ function Stroop({ onBack, history, setHistory }) {
           <div style={{ fontSize: 13, color: "var(--c-sub)" }}>↑ 这个字的颜色是什么？</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "min(300px, 80vw)" }}>
             {options.map((opt) => {
-              const c = STROOP_COLORS.find((x) => x.name === opt);
               return (
                 <button key={opt} onClick={() => handleAnswer(opt)} disabled={!!feedback}
                   style={{
-                    padding: "14px 0", borderRadius: 12, border: `2px solid ${c.color}33`,
+                    padding: "14px 0", borderRadius: 12, border: "2px solid var(--c-sub)",
                     background: "var(--c-cell)", cursor: "pointer", fontSize: 18, fontWeight: 700,
-                    color: c.color, opacity: feedback ? 0.6 : 1,
+                    color: "var(--c-text)", opacity: feedback ? 0.6 : 1,
                     transition: "all .15s",
                   }}>{opt}</button>
               );
