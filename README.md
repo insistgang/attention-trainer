@@ -15,13 +15,13 @@
 
 ## 🚀 在线体验
 
-访问：[https://your-username.github.io/attention-trainer](https://your-username.github.io/attention-trainer)
+访问：[https://insistgang.github.io/attention-trainer](https://insistgang.github.io/attention-trainer)
 
 ## 📦 本地运行
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/attention-trainer.git
+git clone https://github.com/insistgang/attention-trainer.git
 cd attention-trainer
 
 # 安装依赖

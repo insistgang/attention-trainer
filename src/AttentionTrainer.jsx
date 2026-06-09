@@ -17,6 +17,24 @@ const GAME_ICONS = {
   stroop: "◉",
 };
 
+export function scoreNBackResponses(sequence, n, responses) {
+  let correct = 0;
+  let total = 0;
+
+  for (let i = n; i < sequence.length; i++) {
+    const isMatch = sequence[i] === sequence[i - n];
+    const userResponse = responses[i];
+    total++;
+    if (userResponse === isMatch) correct++;
+  }
+
+  return {
+    correct,
+    total,
+    accuracy: total > 0 ? Math.round((correct / total) * 100) : 0,
+  };
+}
+
 // ─── Schulte Grid ───
 function SchulteGrid({ onBack, history, setHistory }) {
   const [grid, setGrid] = useState([]);
@@ -157,13 +175,14 @@ function NBack({ onBack, history, setHistory }) {
   const [sequence, setSequence] = useState([]);
   const [current, setCurrent] = useState(-1);
   const [running, setRunning] = useState(false);
-  const [answers, setAnswers] = useState([]);
   const [responded, setResponded] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [results, setResults] = useState(null);
   const seqLen = 20 + n;
   const letters = "BCDFGHJKLMNPQRSTVWXZ";
+  const keyboardHint = "快捷键：M=相同，N 或空格=不同";
   const timerRef = useRef(null);
+  const responsesRef = useRef({});
 
   const generateSeq = useCallback(() => {
     const seq = [];
@@ -183,7 +202,7 @@ function NBack({ onBack, history, setHistory }) {
     const seq = generateSeq();
     setSequence(seq);
     setCurrent(-1);
-    setAnswers([]);
+    responsesRef.current = {};
     setResults(null);
     setRunning(true);
     setResponded(false);
@@ -199,29 +218,21 @@ function NBack({ onBack, history, setHistory }) {
         setFeedback(null);
       } else {
         setRunning(false);
-        // calc results
-        let correct = 0, total = 0;
-        for (let i = n; i < seqLen; i++) {
-          const isMatch = sequence[i] === sequence[i - n];
-          const userSaidMatch = answers.includes(i);
-          total++;
-          if (isMatch === userSaidMatch) correct++;
-        }
-        const acc = Math.round((correct / total) * 100);
-        setResults({ correct, total, accuracy: acc });
-        setHistory((h) => [...h, { n, accuracy: acc, date: new Date().toLocaleTimeString() }]);
+        const result = scoreNBackResponses(sequence, n, responsesRef.current);
+        setResults(result);
+        setHistory((h) => [...h, { n, accuracy: result.accuracy, date: new Date().toLocaleTimeString() }]);
       }
     }, current === -1 ? 500 : 2200);
     return () => clearTimeout(timerRef.current);
-  }, [current, running, seqLen]);
+  }, [current, n, running, sequence, seqLen, setHistory]);
 
-  const handleResponse = (isMatch) => {
+  const handleResponse = useCallback((isMatch) => {
     if (!running || current < n || responded) return;
     setResponded(true);
     const actualMatch = sequence[current] === sequence[current - n];
-    if (isMatch) setAnswers((a) => [...a, current]);
+    responsesRef.current[current] = isMatch;
     setFeedback(actualMatch === isMatch ? "correct" : "wrong");
-  };
+  }, [current, n, responded, running, sequence]);
 
   useEffect(() => {
     if (!running || current < n) return;
@@ -231,7 +242,7 @@ function NBack({ onBack, history, setHistory }) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [running, current, responded, sequence, n]);
+  }, [current, handleResponse, n, running]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
@@ -239,11 +250,14 @@ function NBack({ onBack, history, setHistory }) {
         <button onClick={onBack} style={backBtnStyle}>← 返回</button>
         <div style={{ display: "flex", gap: 8 }}>
           {[2, 3, 4].map((v) => (
-            <button key={v} onClick={() => !running && setN(v)}
+            <button key={v} onClick={() => setN(v)} disabled={running}
+              aria-label={`${v}-Back难度${running ? "，训练中不可切换" : ""}`}
               style={{
                 ...smallBtnStyle,
                 background: n === v ? "var(--c-accent)" : "var(--c-cell)",
                 color: n === v ? "#fff" : "var(--c-text)",
+                opacity: running ? 0.55 : 1,
+                cursor: running ? "not-allowed" : "pointer",
               }}>{v}-Back</button>
           ))}
         </div>
@@ -254,6 +268,7 @@ function NBack({ onBack, history, setHistory }) {
           <p style={{ color: "var(--c-sub)", fontSize: 15, lineHeight: 1.8, marginBottom: 24, maxWidth: 360 }}>
             依次出现字母，判断当前字母是否与 <strong style={{ color: "var(--c-accent)" }}>{n}步前</strong> 相同。
             <br />点击"相同"或"不同"作答。
+            <br />{keyboardHint}
           </p>
           <button onClick={startGame} style={primaryBtnStyle}>开始训练</button>
         </div>
@@ -277,19 +292,26 @@ function NBack({ onBack, history, setHistory }) {
             </span>
           </div>
           {current >= n && (
-            <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={() => handleResponse(true)} disabled={responded}
-                style={{
-                  ...primaryBtnStyle, padding: "12px 28px",
-                  opacity: responded ? 0.5 : 1,
-                  background: "var(--c-accent)",
-                }}>相同 (M)</button>
-              <button onClick={() => handleResponse(false)} disabled={responded}
-                style={{
-                  ...primaryBtnStyle, padding: "12px 28px",
-                  opacity: responded ? 0.5 : 1,
-                  background: "var(--c-cell)", color: "var(--c-text)",
-                }}>不同 (N)</button>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+              <div style={{ fontSize: 12, color: "var(--c-sub)" }}>{keyboardHint}</div>
+              <div style={{ display: "flex", gap: 12 }}>
+                <button onClick={() => handleResponse(true)} disabled={responded}
+                  aria-label="回答相同，快捷键 M"
+                  style={{
+                    ...primaryBtnStyle, padding: "12px 28px",
+                    opacity: responded ? 0.5 : 1,
+                    background: "var(--c-accent)",
+                    cursor: responded ? "not-allowed" : "pointer",
+                  }}>相同 (M)</button>
+                <button onClick={() => handleResponse(false)} disabled={responded}
+                  aria-label="回答不同，快捷键 N 或空格"
+                  style={{
+                    ...primaryBtnStyle, padding: "12px 28px",
+                    opacity: responded ? 0.5 : 1,
+                    background: "var(--c-cell)", color: "var(--c-text)",
+                    cursor: responded ? "not-allowed" : "pointer",
+                  }}>不同 (N)</button>
+              </div>
             </div>
           )}
           {current >= 0 && current < n && (
@@ -399,7 +421,7 @@ function Stroop({ onBack, history, setHistory }) {
     }, 500);
   };
 
-  const getOptions = () => {
+  const getOptions = useCallback(() => {
     if (!running || !trials[current]) return [];
     const correctColor = trials[current].color.name;
     const opts = [correctColor];
@@ -412,14 +434,14 @@ function Stroop({ onBack, history, setHistory }) {
       [opts[i], opts[j]] = [opts[j], opts[i]];
     }
     return opts;
-  };
+  }, [current, running, trials]);
 
   const [options, setOptions] = useState([]);
   useEffect(() => {
     if (running && trials[current]) {
       setOptions(getOptions());
     }
-  }, [current, running, trials.length]);
+  }, [current, getOptions, running, trials]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
@@ -571,13 +593,15 @@ export default function App() {
             {GAMES.map((g) => {
               const hist = g === "schulte" ? schulteHistory : g === "nback" ? nbackHistory : stroopHistory;
               return (
-                <button key={g} onClick={() => setActive(g)} style={{
-                  display: "flex", alignItems: "center", gap: 16,
-                  padding: "20px 20px", borderRadius: 16,
-                  background: "var(--c-card)", border: "1px solid #ffffff08",
-                  cursor: "pointer", textAlign: "left",
-                  transition: "all .2s",
-                }}>
+                <button key={g} onClick={() => setActive(g)}
+                  aria-label={`开始${GAME_LABELS[g]}训练：${GAME_DESC[g]}`}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 16,
+                    padding: "20px 20px", borderRadius: 16,
+                    background: "var(--c-card)", border: "1px solid #ffffff08",
+                    cursor: "pointer", textAlign: "left",
+                    transition: "all .2s",
+                  }}>
                   <div style={{
                     width: 48, height: 48, borderRadius: 14,
                     background: "var(--c-cell)", display: "flex", alignItems: "center", justifyContent: "center",
