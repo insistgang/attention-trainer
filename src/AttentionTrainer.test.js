@@ -88,6 +88,16 @@ describe("AttentionTrainer accessibility", () => {
     ]));
   });
 
+  test("presents the focus console status and training metadata", () => {
+    rendered = renderTrainer();
+
+    expect(rendered.container.textContent).toContain("专注控制台");
+    expect(rendered.container.textContent).toContain("系统就绪");
+    expect(rendered.container.textContent).toContain("3–5 分钟");
+    expect(rendered.container.textContent).toContain("4–6 分钟");
+    expect(rendered.container.textContent).toContain("2–4 分钟");
+  });
+
   test("shows N-Back keyboard hint and disables difficulty buttons while running", () => {
     rendered = renderTrainer();
 

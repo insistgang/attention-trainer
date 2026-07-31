@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import "./AttentionTrainer.css";
 
 const GAMES = ["schulte", "nback", "stroop"];
 const GAME_LABELS = {
@@ -11,10 +12,25 @@ const GAME_DESC = {
   nback: "判断当前字母是否与N步前相同，训练工作记忆",
   stroop: "说出文字的颜色而非内容，训练抗干扰能力",
 };
-const GAME_ICONS = {
-  schulte: "◫",
-  nback: "⟲",
-  stroop: "◉",
+const GAME_META = {
+  schulte: {
+    index: "01",
+    duration: "3–5 分钟",
+    target: "视觉扫描",
+    mark: "▦",
+  },
+  nback: {
+    index: "02",
+    duration: "4–6 分钟",
+    target: "工作记忆",
+    mark: "↺",
+  },
+  stroop: {
+    index: "03",
+    duration: "2–4 分钟",
+    target: "抗干扰",
+    mark: "色",
+  },
 };
 
 export function scoreNBackResponses(sequence, n, responses) {
@@ -35,7 +51,56 @@ export function scoreNBackResponses(sequence, n, responses) {
   };
 }
 
-// ─── Schulte Grid ───
+function SessionHeader({ onBack, index, kicker, title, toolbar }) {
+  return (
+    <header className="session-header">
+      <button className="back-button" onClick={onBack} aria-label="返回专注控制台">
+        ←
+      </button>
+      <div>
+        <div className="session-kicker">
+          Module {index} / {kicker}
+        </div>
+        <h2 className="session-title">{title}</h2>
+      </div>
+      <div className="session-toolbar">{toolbar}</div>
+    </header>
+  );
+}
+
+function HistoryPanel({
+  history,
+  label = "最近训练",
+  getHeight,
+  formatValue,
+  isHighlighted,
+}) {
+  if (history.length === 0) return null;
+
+  const recent = history.slice(-8);
+
+  return (
+    <section className="history-panel" aria-label={label}>
+      <div className="history-label">
+        {label} / Last {recent.length}
+      </div>
+      <div className="history-chart">
+        {recent.map((entry, index) => (
+          <div className="history-bar" key={`${entry.date}-${index}`}>
+            <span className="history-bar__value">{formatValue(entry)}</span>
+            <span
+              className={`history-bar__fill ${
+                isHighlighted(entry) ? "is-highlight" : ""
+              }`}
+              style={{ "--bar-height": `${getHeight(entry)}%` }}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SchulteGrid({ onBack, history, setHistory }) {
   const [grid, setGrid] = useState([]);
   const [next, setNext] = useState(1);
@@ -47,12 +112,15 @@ function SchulteGrid({ onBack, history, setHistory }) {
   const timerRef = useRef(null);
 
   const shuffle = useCallback(() => {
-    const arr = Array.from({ length: 25 }, (_, i) => i + 1);
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+    const values = Array.from({ length: 25 }, (_, index) => index + 1);
+    for (let index = values.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [values[index], values[swapIndex]] = [
+        values[swapIndex],
+        values[index],
+      ];
     }
-    return arr;
+    return values;
   }, []);
 
   const startGame = useCallback(() => {
@@ -62,114 +130,133 @@ function SchulteGrid({ onBack, history, setHistory }) {
     setFinished(false);
     setElapsed(0);
     setWrongCell(null);
-    const t = Date.now();
-    setStartTime(t);
-    timerRef.current = setInterval(() => setElapsed(Date.now() - t), 100);
+    const startedAt = Date.now();
+    setStartTime(startedAt);
+    timerRef.current = setInterval(
+      () => setElapsed(Date.now() - startedAt),
+      100,
+    );
   }, [shuffle]);
 
   useEffect(() => () => clearInterval(timerRef.current), []);
 
-  const handleClick = (num, idx) => {
+  const handleClick = (number, index) => {
     if (!started || finished) return;
-    if (num === next) {
+    if (number === next) {
       setWrongCell(null);
-      if (num === 25) {
+      if (number === 25) {
         clearInterval(timerRef.current);
         const time = ((Date.now() - startTime) / 1000).toFixed(1);
         setFinished(true);
-        setHistory((h) => [...h, { time: parseFloat(time), date: new Date().toLocaleTimeString() }]);
+        setHistory((entries) => [
+          ...entries,
+          {
+            time: parseFloat(time),
+            date: new Date().toLocaleTimeString(),
+          },
+        ]);
       }
       setNext(next + 1);
     } else {
-      setWrongCell(idx);
+      setWrongCell(index);
       setTimeout(() => setWrongCell(null), 400);
     }
   };
 
-  const best = history.length ? Math.min(...history.map((h) => h.time)) : null;
+  const best = history.length
+    ? Math.min(...history.map((entry) => entry.time))
+    : null;
+  const slowest = history.length
+    ? Math.max(...history.slice(-8).map((entry) => entry.time))
+    : 1;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, width: "100%", justifyContent: "space-between" }}>
-        <button onClick={onBack} style={backBtnStyle}>← 返回</button>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 28, fontWeight: 700, color: "var(--c-text)" }}>
-          {(elapsed / 1000).toFixed(1)}s
-        </div>
-      </div>
+    <section className="session-shell session-shell--schulte">
+      <SessionHeader
+        onBack={onBack}
+        index="01"
+        kicker="Visual Scan"
+        title="舒尔特方格"
+        toolbar={
+          <div className="session-readout" aria-live="polite">
+            <small>Elapsed</small>
+            {(elapsed / 1000).toFixed(1)}s
+          </div>
+        }
+      />
 
-      {!started ? (
-        <div style={{ textAlign: "center", padding: "40px 0" }}>
-          <p style={{ color: "var(--c-sub)", fontSize: 15, lineHeight: 1.8, marginBottom: 24, maxWidth: 340 }}>
-            眼睛尽量盯住中心区域，用余光搜索数字。按 1→25 顺序依次点击。
-          </p>
-          <button onClick={startGame} style={primaryBtnStyle}>开始训练</button>
-        </div>
-      ) : (
-        <>
-          <div style={{ fontSize: 14, color: "var(--c-sub)", marginBottom: -8 }}>
-            找到: <span style={{ color: "var(--c-accent)", fontWeight: 700 }}>{Math.min(next, 25)}</span>/25
-            {best && <span style={{ marginLeft: 16 }}>最佳: {best}s</span>}
+      <div className="session-panel">
+        {!started ? (
+          <div className="session-intro">
+            <div className="session-intro__code">01—25</div>
+            <h3>扩大视觉注意范围</h3>
+            <p>
+              眼睛尽量保持在中心区域，用余光搜索数字。
+              按照从 1 到 25 的顺序依次点击。
+            </p>
+            <button className="control-button" onClick={startGame}>
+              开始训练
+            </button>
           </div>
-          <div style={{
-            display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6,
-            width: "min(340px, 85vw)", aspectRatio: "1"
-          }}>
-            {grid.map((num, i) => {
-              const found = num < next;
-              const isWrong = wrongCell === i;
-              return (
-                <button key={i} onClick={() => handleClick(num, i)}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 22, fontWeight: 700,
-                    fontFamily: "'DM Mono', monospace",
-                    borderRadius: 10, border: "none", cursor: found ? "default" : "pointer",
-                    background: found ? "var(--c-found)" : isWrong ? "var(--c-wrong)" : "var(--c-cell)",
-                    color: found ? "var(--c-found-text)" : "var(--c-text)",
-                    transition: "all .15s",
-                    transform: isWrong ? "scale(0.92)" : "scale(1)",
-                    opacity: found ? 0.35 : 1,
-                  }}>{num}</button>
-              );
-            })}
-          </div>
-          {finished && (
-            <div style={{ textAlign: "center" }}>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--c-accent)", marginBottom: 12 }}>
-                完成！用时 {history[history.length - 1].time}s
-              </div>
-              <button onClick={startGame} style={primaryBtnStyle}>再来一轮</button>
+        ) : (
+          <>
+            <div className="schulte-status" aria-live="polite">
+              <span>
+                当前目标 <strong>{Math.min(next, 25)}</strong> / 25
+              </span>
+              <span>{best ? `最佳 ${best}s` : "建立首轮基准"}</span>
             </div>
-          )}
-        </>
-      )}
 
-      {history.length > 0 && (
-        <div style={{ width: "100%", marginTop: 8 }}>
-          <div style={{ fontSize: 13, color: "var(--c-sub)", marginBottom: 8 }}>历史记录 (最近{Math.min(history.length, 8)}轮)</div>
-          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 60 }}>
-            {history.slice(-8).map((h, i) => {
-              const max = Math.max(...history.slice(-8).map(x => x.time));
-              const pct = (h.time / max) * 100;
-              return (
-                <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: 10, color: "var(--c-sub)" }}>{h.time}s</span>
-                  <div style={{
-                    width: "100%", height: `${pct}%`, minHeight: 4,
-                    background: h.time === best ? "var(--c-accent)" : "var(--c-cell)",
-                    borderRadius: 4,
-                  }} />
+            <div className="schulte-grid" aria-label="舒尔特数字方格">
+              {grid.map((number, index) => {
+                const found = number < next;
+                const isWrong = wrongCell === index;
+                return (
+                  <button
+                    className={`schulte-cell ${
+                      found ? "is-found" : ""
+                    } ${isWrong ? "is-wrong" : ""}`}
+                    key={number}
+                    onClick={() => handleClick(number, index)}
+                    aria-label={`数字 ${number}${found ? "，已完成" : ""}`}
+                    aria-disabled={found}
+                  >
+                    {number}
+                  </button>
+                );
+              })}
+            </div>
+
+            {finished && (
+              <div className="completion-banner" aria-live="polite">
+                <div>
+                  <strong>扫描完成</strong>
+                  <span>
+                    本轮用时 {history[history.length - 1].time}s
+                  </span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
+                <button className="control-button" onClick={startGame}>
+                  再来一轮
+                </button>
+              </div>
+            )}
+          </>
+        )}
+
+        <HistoryPanel
+          history={history}
+          label="扫描速度"
+          getHeight={(entry) =>
+            Math.max(14, Math.round((best / entry.time) * 100))
+          }
+          formatValue={(entry) => `${entry.time}s`}
+          isHighlighted={(entry) => entry.time === best && entry.time <= slowest}
+        />
+      </div>
+    </section>
   );
 }
 
-// ─── N-Back ───
 function NBack({ onBack, history, setHistory }) {
   const [n, setN] = useState(2);
   const [sequence, setSequence] = useState([]);
@@ -178,29 +265,31 @@ function NBack({ onBack, history, setHistory }) {
   const [responded, setResponded] = useState(false);
   const [feedback, setFeedback] = useState(null);
   const [results, setResults] = useState(null);
-  const seqLen = 20 + n;
+  const sequenceLength = 20 + n;
   const letters = "BCDFGHJKLMNPQRSTVWXZ";
   const keyboardHint = "快捷键：M=相同，N 或空格=不同";
   const timerRef = useRef(null);
   const responsesRef = useRef({});
 
-  const generateSeq = useCallback(() => {
-    const seq = [];
-    for (let i = 0; i < seqLen; i++) {
-      if (i >= n && Math.random() < 0.33) {
-        seq.push(seq[i - n]);
+  const generateSequence = useCallback(() => {
+    const generated = [];
+    for (let index = 0; index < sequenceLength; index++) {
+      if (index >= n && Math.random() < 0.33) {
+        generated.push(generated[index - n]);
       } else {
-        let c;
-        do { c = letters[Math.floor(Math.random() * letters.length)]; } while (i > 0 && c === seq[i - 1]);
-        seq.push(c);
+        let letter;
+        do {
+          letter = letters[Math.floor(Math.random() * letters.length)];
+        } while (index > 0 && letter === generated[index - 1]);
+        generated.push(letter);
       }
     }
-    return seq;
-  }, [n, seqLen]);
+    return generated;
+  }, [n, sequenceLength]);
 
   const startGame = () => {
-    const seq = generateSeq();
-    setSequence(seq);
+    const generated = generateSequence();
+    setSequence(generated);
     setCurrent(-1);
     responsesRef.current = {};
     setResults(null);
@@ -211,164 +300,205 @@ function NBack({ onBack, history, setHistory }) {
 
   useEffect(() => {
     if (!running) return;
-    timerRef.current = setTimeout(() => {
-      if (current < seqLen - 1) {
-        setCurrent((c) => c + 1);
-        setResponded(false);
-        setFeedback(null);
-      } else {
-        setRunning(false);
-        const result = scoreNBackResponses(sequence, n, responsesRef.current);
-        setResults(result);
-        setHistory((h) => [...h, { n, accuracy: result.accuracy, date: new Date().toLocaleTimeString() }]);
-      }
-    }, current === -1 ? 500 : 2200);
+    timerRef.current = setTimeout(
+      () => {
+        if (current < sequenceLength - 1) {
+          setCurrent((value) => value + 1);
+          setResponded(false);
+          setFeedback(null);
+        } else {
+          setRunning(false);
+          const result = scoreNBackResponses(
+            sequence,
+            n,
+            responsesRef.current,
+          );
+          setResults(result);
+          setHistory((entries) => [
+            ...entries,
+            {
+              n,
+              accuracy: result.accuracy,
+              date: new Date().toLocaleTimeString(),
+            },
+          ]);
+        }
+      },
+      current === -1 ? 500 : 2200,
+    );
     return () => clearTimeout(timerRef.current);
-  }, [current, n, running, sequence, seqLen, setHistory]);
+  }, [current, n, running, sequence, sequenceLength, setHistory]);
 
-  const handleResponse = useCallback((isMatch) => {
-    if (!running || current < n || responded) return;
-    setResponded(true);
-    const actualMatch = sequence[current] === sequence[current - n];
-    responsesRef.current[current] = isMatch;
-    setFeedback(actualMatch === isMatch ? "correct" : "wrong");
-  }, [current, n, responded, running, sequence]);
+  const handleResponse = useCallback(
+    (isMatch) => {
+      if (!running || current < n || responded) return;
+      setResponded(true);
+      const actualMatch = sequence[current] === sequence[current - n];
+      responsesRef.current[current] = isMatch;
+      setFeedback(actualMatch === isMatch ? "correct" : "wrong");
+    },
+    [current, n, responded, running, sequence],
+  );
 
   useEffect(() => {
     if (!running || current < n) return;
-    const handler = (e) => {
-      if (e.key === "m" || e.key === "M") handleResponse(true);
-      if (e.key === "n" || e.key === "N" || e.key === " ") handleResponse(false);
+    const handler = (event) => {
+      if (event.key === "m" || event.key === "M") handleResponse(true);
+      if (
+        event.key === "n" ||
+        event.key === "N" ||
+        event.key === " "
+      ) {
+        handleResponse(false);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [current, handleResponse, n, running]);
 
+  const progress =
+    current < 0 ? 0 : Math.round(((current + 1) / sequenceLength) * 100);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, width: "100%", justifyContent: "space-between" }}>
-        <button onClick={onBack} style={backBtnStyle}>← 返回</button>
-        <div style={{ display: "flex", gap: 8 }}>
-          {[2, 3, 4].map((v) => (
-            <button key={v} onClick={() => setN(v)} disabled={running}
-              aria-label={`${v}-Back难度${running ? "，训练中不可切换" : ""}`}
-              style={{
-                ...smallBtnStyle,
-                background: n === v ? "var(--c-accent)" : "var(--c-cell)",
-                color: n === v ? "#fff" : "var(--c-text)",
-                opacity: running ? 0.55 : 1,
-                cursor: running ? "not-allowed" : "pointer",
-              }}>{v}-Back</button>
-          ))}
-        </div>
-      </div>
-
-      {!running && !results && (
-        <div style={{ textAlign: "center", padding: "30px 0" }}>
-          <p style={{ color: "var(--c-sub)", fontSize: 15, lineHeight: 1.8, marginBottom: 24, maxWidth: 360 }}>
-            依次出现字母，判断当前字母是否与 <strong style={{ color: "var(--c-accent)" }}>{n}步前</strong> 相同。
-            <br />点击"相同"或"不同"作答。
-            <br />{keyboardHint}
-          </p>
-          <button onClick={startGame} style={primaryBtnStyle}>开始训练</button>
-        </div>
-      )}
-
-      {running && (
-        <>
-          <div style={{ fontSize: 13, color: "var(--c-sub)" }}>
-            第 {Math.max(0, current + 1)}/{seqLen} 个 &nbsp;|&nbsp; {n}-Back模式
+    <section className="session-shell session-shell--nback">
+      <SessionHeader
+        onBack={onBack}
+        index="02"
+        kicker="Working Memory"
+        title="N-Back"
+        toolbar={
+          <div className="difficulty-group" aria-label="N-Back 难度">
+            {[2, 3, 4].map((value) => (
+              <button
+                className={`difficulty-button ${n === value ? "is-active" : ""}`}
+                key={value}
+                onClick={() => setN(value)}
+                disabled={running}
+                aria-label={`${value}-Back难度${
+                  running ? "，训练中不可切换" : ""
+                }`}
+              >
+                {value}-Back
+              </button>
+            ))}
           </div>
-          <div style={{
-            width: 140, height: 140, display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 20, background: feedback === "correct" ? "var(--c-correct-bg)" : feedback === "wrong" ? "var(--c-wrong)" : "var(--c-cell)",
-            transition: "all .2s",
-          }}>
-            <span style={{
-              fontSize: 64, fontWeight: 800, fontFamily: "'DM Mono', monospace",
-              color: current >= 0 ? "var(--c-text)" : "transparent",
-            }}>
-              {current >= 0 ? sequence[current] : ""}
-            </span>
+        }
+      />
+
+      <div className="session-panel">
+        {!running && !results && (
+          <div className="session-intro">
+            <div className="session-intro__code">{n}—BACK</div>
+            <h3>保持工作记忆在线</h3>
+            <p>
+              依次观察字母，判断当前字母是否与
+              <strong> {n} 步前 </strong>
+              相同。点击“相同”或“不同”作答。
+              <br />
+              {keyboardHint}
+            </p>
+            <button className="control-button" onClick={startGame}>
+              开始训练
+            </button>
           </div>
-          {current >= n && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-              <div style={{ fontSize: 12, color: "var(--c-sub)" }}>{keyboardHint}</div>
-              <div style={{ display: "flex", gap: 12 }}>
-                <button onClick={() => handleResponse(true)} disabled={responded}
-                  aria-label="回答相同，快捷键 M"
-                  style={{
-                    ...primaryBtnStyle, padding: "12px 28px",
-                    opacity: responded ? 0.5 : 1,
-                    background: "var(--c-accent)",
-                    cursor: responded ? "not-allowed" : "pointer",
-                  }}>相同 (M)</button>
-                <button onClick={() => handleResponse(false)} disabled={responded}
-                  aria-label="回答不同，快捷键 N 或空格"
-                  style={{
-                    ...primaryBtnStyle, padding: "12px 28px",
-                    opacity: responded ? 0.5 : 1,
-                    background: "var(--c-cell)", color: "var(--c-text)",
-                    cursor: responded ? "not-allowed" : "pointer",
-                  }}>不同 (N)</button>
-              </div>
+        )}
+
+        {running && (
+          <>
+            <div className="session-counter">
+              Sequence <strong>{Math.max(0, current + 1)}</strong> /{" "}
+              {sequenceLength} · {n}-Back
             </div>
-          )}
-          {current >= 0 && current < n && (
-            <div style={{ fontSize: 14, color: "var(--c-sub)" }}>先记住前{n}个字母...</div>
-          )}
-          <div style={{ display: "flex", gap: 3, marginTop: 4 }}>
-            {Array.from({ length: seqLen }).map((_, i) => (
-              <div key={i} style={{
-                width: 8, height: 8, borderRadius: "50%",
-                background: i === current ? "var(--c-accent)" : i < current ? "var(--c-sub)" : "var(--c-cell)",
-                transition: "all .2s",
-              }} />
-            ))}
-          </div>
-        </>
-      )}
+            <div
+              className={`stimulus-stage ${
+                feedback ? `is-${feedback}` : ""
+              }`}
+              aria-live="polite"
+              aria-label={
+                current >= 0 ? `当前字母 ${sequence[current]}` : "准备开始"
+              }
+            >
+              <span className="stimulus-letter">
+                {current >= 0 ? sequence[current] : ""}
+              </span>
+            </div>
 
-      {results && (
-        <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <div style={{ fontSize: 48, fontWeight: 800, color: "var(--c-accent)", fontFamily: "'DM Mono', monospace" }}>
-            {results.accuracy}%
-          </div>
-          <div style={{ fontSize: 14, color: "var(--c-sub)", marginBottom: 20 }}>
-            正确 {results.correct}/{results.total}
-          </div>
-          <button onClick={startGame} style={primaryBtnStyle}>再来一轮</button>
-        </div>
-      )}
-
-      {history.length > 0 && !running && (
-        <div style={{ width: "100%", marginTop: 8 }}>
-          <div style={{ fontSize: 13, color: "var(--c-sub)", marginBottom: 8 }}>历史记录</div>
-          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 50 }}>
-            {history.slice(-8).map((h, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                <span style={{ fontSize: 10, color: "var(--c-sub)" }}>{h.accuracy}%</span>
-                <div style={{
-                  width: "100%", height: `${h.accuracy}%`, minHeight: 4,
-                  background: h.accuracy >= 80 ? "var(--c-accent)" : "var(--c-cell)",
-                  borderRadius: 4,
-                }} />
+            {current >= n ? (
+              <div className="response-controls">
+                <div className="keyboard-hint">{keyboardHint}</div>
+                <div className="response-buttons">
+                  <button
+                    className="answer-button answer-button--primary"
+                    onClick={() => handleResponse(true)}
+                    disabled={responded}
+                    aria-label="回答相同，快捷键 M"
+                  >
+                    相同 (M)
+                  </button>
+                  <button
+                    className="answer-button"
+                    onClick={() => handleResponse(false)}
+                    disabled={responded}
+                    aria-label="回答不同，快捷键 N 或空格"
+                  >
+                    不同 (N)
+                  </button>
+                </div>
               </div>
-            ))}
+            ) : (
+              current >= 0 && (
+                <div className="memory-hint">先记住前 {n} 个字母</div>
+              )
+            )}
+
+            <div
+              className="sequence-progress"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={progress}
+            >
+              <div
+                className="sequence-progress__fill"
+                style={{ "--progress": `${progress}%` }}
+              />
+            </div>
+          </>
+        )}
+
+        {results && (
+          <div className="result-card" aria-live="polite">
+            <div className="result-card__eyebrow">Session Complete</div>
+            <div className="result-card__value">{results.accuracy}%</div>
+            <div className="result-card__detail">
+              正确 {results.correct} / {results.total}
+            </div>
+            <button className="control-button" onClick={startGame}>
+              再来一轮
+            </button>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {!running && (
+          <HistoryPanel
+            history={history}
+            label="记忆准确率"
+            getHeight={(entry) => Math.max(8, entry.accuracy)}
+            formatValue={(entry) => `${entry.accuracy}%`}
+            isHighlighted={(entry) => entry.accuracy >= 80}
+          />
+        )}
+      </div>
+    </section>
   );
 }
 
-// ─── Stroop ───
 const STROOP_COLORS = [
-  { name: "红", color: "#ef4444" },
-  { name: "蓝", color: "#3b82f6" },
-  { name: "绿", color: "#22c55e" },
-  { name: "黄", color: "#eab308" },
-  { name: "紫", color: "#a855f7" },
+  { name: "红", color: "#ff5f68" },
+  { name: "蓝", color: "#50a8ff" },
+  { name: "绿", color: "#5fdd8d" },
+  { name: "黄", color: "#f2cb4d" },
+  { name: "紫", color: "#ba88ff" },
 ];
 
 function Stroop({ onBack, history, setHistory }) {
@@ -382,14 +512,19 @@ function Stroop({ onBack, history, setHistory }) {
   const totalTrials = 20;
 
   const generateTrials = () => {
-    const t = [];
-    for (let i = 0; i < totalTrials; i++) {
-      const wordIdx = Math.floor(Math.random() * STROOP_COLORS.length);
-      let colorIdx;
-      do { colorIdx = Math.floor(Math.random() * STROOP_COLORS.length); } while (colorIdx === wordIdx);
-      t.push({ word: STROOP_COLORS[wordIdx].name, color: STROOP_COLORS[colorIdx] });
+    const generated = [];
+    for (let index = 0; index < totalTrials; index++) {
+      const wordIndex = Math.floor(Math.random() * STROOP_COLORS.length);
+      let colorIndex;
+      do {
+        colorIndex = Math.floor(Math.random() * STROOP_COLORS.length);
+      } while (colorIndex === wordIndex);
+      generated.push({
+        word: STROOP_COLORS[wordIndex].name,
+        color: STROOP_COLORS[colorIndex],
+      });
     }
-    return t;
+    return generated;
   };
 
   const startGame = () => {
@@ -405,18 +540,30 @@ function Stroop({ onBack, history, setHistory }) {
   const handleAnswer = (colorName) => {
     if (!running || feedback) return;
     const isCorrect = colorName === trials[current].color.name;
-    if (isCorrect) setCorrect((c) => c + 1);
+    if (isCorrect) setCorrect((value) => value + 1);
     setFeedback(isCorrect ? "correct" : "wrong");
     setTimeout(() => {
       setFeedback(null);
       if (current + 1 >= totalTrials) {
         setRunning(false);
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-        const acc = Math.round(((isCorrect ? correct + 1 : correct) / totalTrials) * 100);
-        setResults({ accuracy: acc, time: parseFloat(elapsed) });
-        setHistory((h) => [...h, { accuracy: acc, time: parseFloat(elapsed), date: new Date().toLocaleTimeString() }]);
+        const accuracy = Math.round(
+          ((isCorrect ? correct + 1 : correct) / totalTrials) * 100,
+        );
+        setResults({
+          accuracy,
+          time: parseFloat(elapsed),
+        });
+        setHistory((entries) => [
+          ...entries,
+          {
+            accuracy,
+            time: parseFloat(elapsed),
+            date: new Date().toLocaleTimeString(),
+          },
+        ]);
       } else {
-        setCurrent((c) => c + 1);
+        setCurrent((value) => value + 1);
       }
     }, 500);
   };
@@ -424,16 +571,20 @@ function Stroop({ onBack, history, setHistory }) {
   const getOptions = useCallback(() => {
     if (!running || !trials[current]) return [];
     const correctColor = trials[current].color.name;
-    const opts = [correctColor];
-    while (opts.length < 4) {
-      const r = STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)].name;
-      if (!opts.includes(r)) opts.push(r);
+    const options = [correctColor];
+    while (options.length < 4) {
+      const randomColor =
+        STROOP_COLORS[Math.floor(Math.random() * STROOP_COLORS.length)].name;
+      if (!options.includes(randomColor)) options.push(randomColor);
     }
-    for (let i = opts.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [opts[i], opts[j]] = [opts[j], opts[i]];
+    for (let index = options.length - 1; index > 0; index--) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      [options[index], options[swapIndex]] = [
+        options[swapIndex],
+        options[index],
+      ];
     }
-    return opts;
+    return options;
   }, [current, running, trials]);
 
   const [options, setOptions] = useState([]);
@@ -443,212 +594,279 @@ function Stroop({ onBack, history, setHistory }) {
     }
   }, [current, getOptions, running, trials]);
 
+  const progress = running
+    ? Math.round(((current + 1) / totalTrials) * 100)
+    : 0;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, width: "100%", justifyContent: "space-between" }}>
-        <button onClick={onBack} style={backBtnStyle}>← 返回</button>
-        {running && <div style={{ fontSize: 14, color: "var(--c-sub)" }}>{current + 1}/{totalTrials}</div>}
+    <section className="session-shell session-shell--stroop">
+      <SessionHeader
+        onBack={onBack}
+        index="03"
+        kicker="Interference Control"
+        title="Stroop 测试"
+        toolbar={
+          <div className="session-readout" aria-live="polite">
+            <small>Trials</small>
+            {running ? `${current + 1}/${totalTrials}` : totalTrials}
+          </div>
+        }
+      />
+
+      <div className="session-panel">
+        {!running && !results && (
+          <div className="session-intro">
+            <div className="session-intro__code">INK≠WORD</div>
+            <h3>过滤文字干扰</h3>
+            <p>
+              屏幕会显示一个颜色词，但字体使用另一种颜色。
+              请选择<strong>字体的颜色</strong>，不要选择文字内容。
+            </p>
+            <button className="control-button" onClick={startGame}>
+              开始训练
+            </button>
+          </div>
+        )}
+
+        {running && trials[current] && (
+          <>
+            <div className="session-counter">
+              Interference <strong>{current + 1}</strong> / {totalTrials}
+            </div>
+            <div
+              className={`stimulus-stage ${
+                feedback ? `is-${feedback}` : ""
+              }`}
+              aria-live="polite"
+              aria-label={`文字 ${trials[current].word}，请选择字体颜色`}
+            >
+              <span
+                className="stimulus-word"
+                style={{ color: trials[current].color.color }}
+              >
+                {trials[current].word}
+              </span>
+            </div>
+            <div className="stimulus-question">这个字的字体颜色是什么？</div>
+            <div className="stroop-options">
+              {options.map((option) => (
+                <button
+                  className="answer-button"
+                  key={option}
+                  onClick={() => handleAnswer(option)}
+                  disabled={Boolean(feedback)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+            <div
+              className="sequence-progress"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow={progress}
+            >
+              <div
+                className="sequence-progress__fill"
+                style={{ "--progress": `${progress}%` }}
+              />
+            </div>
+          </>
+        )}
+
+        {results && (
+          <div className="result-card" aria-live="polite">
+            <div className="result-card__eyebrow">Interference Cleared</div>
+            <div className="result-card__value">{results.accuracy}%</div>
+            <div className="result-card__detail">
+              完成 20 次判断 · 用时 {results.time}s
+            </div>
+            <button className="control-button" onClick={startGame}>
+              再来一轮
+            </button>
+          </div>
+        )}
+
+        {!running && (
+          <HistoryPanel
+            history={history}
+            label="抗干扰准确率"
+            getHeight={(entry) => Math.max(8, entry.accuracy)}
+            formatValue={(entry) => `${entry.accuracy}%`}
+            isHighlighted={(entry) => entry.accuracy >= 80}
+          />
+        )}
       </div>
-
-      {!running && !results && (
-        <div style={{ textAlign: "center", padding: "30px 0" }}>
-          <p style={{ color: "var(--c-sub)", fontSize: 15, lineHeight: 1.8, marginBottom: 24, maxWidth: 360 }}>
-            屏幕显示一个颜色词，但字体是<strong style={{ color: "var(--c-accent)" }}>另一种颜色</strong>。
-            <br />请选择<strong>字体的颜色</strong>，而非文字内容。
-          </p>
-          <button onClick={startGame} style={primaryBtnStyle}>开始训练</button>
-        </div>
-      )}
-
-      {running && trials[current] && (
-        <>
-          <div style={{
-            width: 200, height: 140, display: "flex", alignItems: "center", justifyContent: "center",
-            borderRadius: 20,
-            background: feedback === "correct" ? "var(--c-correct-bg)" : feedback === "wrong" ? "var(--c-wrong)" : "var(--c-cell)",
-            transition: "all .2s",
-          }}>
-            <span style={{
-              fontSize: 56, fontWeight: 900,
-              color: trials[current].color.color,
-            }}>{trials[current].word}</span>
-          </div>
-          <div style={{ fontSize: 13, color: "var(--c-sub)" }}>↑ 这个字的颜色是什么？</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "min(300px, 80vw)" }}>
-            {options.map((opt) => {
-              return (
-                <button key={opt} onClick={() => handleAnswer(opt)} disabled={!!feedback}
-                  style={{
-                    padding: "14px 0", borderRadius: 12, border: "2px solid var(--c-sub)",
-                    background: "var(--c-cell)", cursor: "pointer", fontSize: 18, fontWeight: 700,
-                    color: "var(--c-text)", opacity: feedback ? 0.6 : 1,
-                    transition: "all .15s",
-                  }}>{opt}</button>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {results && (
-        <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <div style={{ fontSize: 48, fontWeight: 800, color: "var(--c-accent)", fontFamily: "'DM Mono', monospace" }}>
-            {results.accuracy}%
-          </div>
-          <div style={{ fontSize: 14, color: "var(--c-sub)", marginBottom: 20 }}>
-            用时 {results.time}s
-          </div>
-          <button onClick={startGame} style={primaryBtnStyle}>再来一轮</button>
-        </div>
-      )}
-
-      {history.length > 0 && !running && (
-        <div style={{ width: "100%", marginTop: 8 }}>
-          <div style={{ fontSize: 13, color: "var(--c-sub)", marginBottom: 8 }}>历史记录</div>
-          <div style={{ display: "flex", gap: 6, alignItems: "flex-end", height: 50 }}>
-            {history.slice(-8).map((h, i) => (
-              <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                <span style={{ fontSize: 10, color: "var(--c-sub)" }}>{h.accuracy}%</span>
-                <div style={{
-                  width: "100%", height: `${h.accuracy}%`, minHeight: 4,
-                  background: h.accuracy >= 80 ? "var(--c-accent)" : "var(--c-cell)",
-                  borderRadius: 4,
-                }} />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
 
-// ─── Styles ───
-const primaryBtnStyle = {
-  padding: "12px 32px", borderRadius: 12, border: "none",
-  background: "var(--c-accent)", color: "#fff", fontSize: 15, fontWeight: 600,
-  cursor: "pointer", transition: "all .2s",
-};
-const backBtnStyle = {
-  padding: "6px 14px", borderRadius: 8, border: "none",
-  background: "var(--c-cell)", color: "var(--c-sub)", fontSize: 13,
-  cursor: "pointer",
-};
-const smallBtnStyle = {
-  padding: "6px 12px", borderRadius: 8, border: "none",
-  fontSize: 12, fontWeight: 600, cursor: "pointer",
-};
-
-// ─── Main App ───
 export default function App() {
   const [active, setActive] = useState(null);
   const [schulteHistory, setSchulteHistory] = useState([]);
   const [nbackHistory, setNbackHistory] = useState([]);
   const [stroopHistory, setStroopHistory] = useState([]);
 
-  const totalSessions = schulteHistory.length + nbackHistory.length + stroopHistory.length;
+  const histories = {
+    schulte: schulteHistory,
+    nback: nbackHistory,
+    stroop: stroopHistory,
+  };
+  const totalSessions =
+    schulteHistory.length + nbackHistory.length + stroopHistory.length;
 
   return (
-    <div style={{
-      "--c-bg": "#0f1117",
-      "--c-card": "#181b25",
-      "--c-cell": "#232738",
-      "--c-text": "#e8eaf0",
-      "--c-sub": "#6b7294",
-      "--c-accent": "#6c63ff",
-      "--c-found": "#2d3148",
-      "--c-found-text": "#4a4f6a",
-      "--c-wrong": "#ff4d6a22",
-      "--c-correct-bg": "#6c63ff22",
-      minHeight: "100vh",
-      background: "var(--c-bg)",
-      color: "var(--c-text)",
-      fontFamily: "'Noto Sans SC', 'SF Pro', -apple-system, sans-serif",
-      padding: "24px 20px",
-      maxWidth: 440,
-      margin: "0 auto",
-    }}>
-      <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;600;700;900&display=swap" rel="stylesheet" />
+    <div className="attention-app">
+      <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600;700;900&display=swap"
+        rel="stylesheet"
+      />
+      <div className="ambient-grid" aria-hidden="true" />
 
-      {!active && (
-        <div style={{ animation: "fadeIn .4s ease" }}>
-          <div style={{ marginBottom: 32 }}>
-            <h1 style={{ fontSize: 26, fontWeight: 900, margin: 0, letterSpacing: -1 }}>
-              专注力训练
-            </h1>
-            <p style={{ color: "var(--c-sub)", fontSize: 14, margin: "6px 0 0" }}>
-              每天10分钟，提升注意力与工作记忆
-            </p>
-            {totalSessions > 0 && (
-              <div style={{
-                marginTop: 14, padding: "10px 16px", borderRadius: 10,
-                background: "var(--c-cell)", fontSize: 13, color: "var(--c-sub)",
-              }}>
-                本次已完成 <strong style={{ color: "var(--c-accent)" }}>{totalSessions}</strong> 轮训练
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {GAMES.map((g) => {
-              const hist = g === "schulte" ? schulteHistory : g === "nback" ? nbackHistory : stroopHistory;
-              return (
-                <button key={g} onClick={() => setActive(g)}
-                  aria-label={`开始${GAME_LABELS[g]}训练：${GAME_DESC[g]}`}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 16,
-                    padding: "20px 20px", borderRadius: 16,
-                    background: "var(--c-card)", border: "1px solid #ffffff08",
-                    cursor: "pointer", textAlign: "left",
-                    transition: "all .2s",
-                  }}>
-                  <div style={{
-                    width: 48, height: 48, borderRadius: 14,
-                    background: "var(--c-cell)", display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 22,
-                  }}>{GAME_ICONS[g]}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: "var(--c-text)", marginBottom: 4 }}>
-                      {GAME_LABELS[g]}
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--c-sub)", lineHeight: 1.4 }}>
-                      {GAME_DESC[g]}
-                    </div>
+      <main className="focus-console">
+        {!active && (
+          <div className="console-home">
+            <header className="console-header">
+              <div className="console-header__top">
+                <div>
+                  <div className="console-eyebrow">
+                    Cognitive Training Unit
                   </div>
-                  {hist.length > 0 && (
-                    <div style={{
-                      padding: "3px 8px", borderRadius: 6,
-                      background: "var(--c-accent)22", color: "var(--c-accent)",
-                      fontSize: 11, fontWeight: 600,
-                    }}>{hist.length}轮</div>
-                  )}
-                </button>
-              );
-            })}
+                  <h1 className="console-title">
+                    专注
+                    <span>控制台</span>
+                  </h1>
+                  <p className="console-subtitle">
+                    三个短时认知训练模块，帮助你校准视觉注意、
+                    工作记忆与抗干扰能力。一次训练，从清晰开始。
+                  </p>
+                </div>
+                <div className="system-status" role="status">
+                  <span className="system-status__dot" aria-hidden="true" />
+                  系统就绪
+                </div>
+              </div>
+
+              <div className="console-metrics" aria-label="训练概览">
+                <div className="metric">
+                  <div className="metric-value">
+                    <em>{String(totalSessions).padStart(2, "0")}</em>
+                  </div>
+                  <div className="metric-label">本次完成轮次</div>
+                </div>
+                <div className="metric">
+                  <div className="metric-value">10 MIN</div>
+                  <div className="metric-label">建议每日训练</div>
+                </div>
+                <div className="metric">
+                  <div className="metric-value">03</div>
+                  <div className="metric-label">认知训练模块</div>
+                </div>
+              </div>
+            </header>
+
+            <section className="training-section" aria-labelledby="training-title">
+              <div className="section-heading">
+                <h2 id="training-title">选择训练模块</h2>
+                <span>Select a protocol</span>
+              </div>
+
+              <div className="training-grid">
+                {GAMES.map((game) => {
+                  const history = histories[game];
+                  const meta = GAME_META[game];
+                  return (
+                    <button
+                      className="training-card"
+                      data-game={game}
+                      key={game}
+                      onClick={() => setActive(game)}
+                      aria-label={`开始${GAME_LABELS[game]}训练：${GAME_DESC[game]}`}
+                    >
+                      <div className="training-card__top">
+                        <span className="training-card__index">
+                          Module {meta.index}
+                        </span>
+                        {history.length > 0 && (
+                          <span className="training-card__count">
+                            {history.length} 轮
+                          </span>
+                        )}
+                      </div>
+                      <div className="training-card__mark" aria-hidden="true">
+                        {meta.mark}
+                      </div>
+                      <h3 className="training-card__title">
+                        {GAME_LABELS[game]}
+                      </h3>
+                      <p className="training-card__description">
+                        {GAME_DESC[game]}
+                      </p>
+                      <div className="training-card__footer">
+                        <span className="training-card__meta">
+                          {meta.duration} · {meta.target}
+                        </span>
+                        <span className="training-card__arrow" aria-hidden="true">
+                          →
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <aside className="protocol" aria-label="推荐训练协议">
+              <div className="protocol-heading">
+                <div className="protocol-title">Recommended</div>
+                <strong>10 分钟训练协议</strong>
+              </div>
+              <div className="protocol-steps">
+                <div className="protocol-step">
+                  <span>01 / 热身</span>
+                  舒尔特方格唤醒视觉扫描
+                </div>
+                <div className="protocol-step">
+                  <span>02 / 核心</span>
+                  N-Back 激活工作记忆
+                </div>
+                <div className="protocol-step">
+                  <span>03 / 收尾</span>
+                  Stroop 训练干扰抑制
+                </div>
+              </div>
+            </aside>
+
+            <footer className="console-footer">
+              <span>Local session · No account required</span>
+              <span>Focus protocol v1.0</span>
+            </footer>
           </div>
+        )}
 
-          <div style={{
-            marginTop: 28, padding: 16, borderRadius: 12,
-            background: "var(--c-card)", border: "1px solid #ffffff06",
-            fontSize: 13, color: "var(--c-sub)", lineHeight: 1.7,
-          }}>
-            <strong style={{ color: "var(--c-text)" }}>训练建议</strong>
-            <br />每天轮流做 2-3 种练习，每种 3-5 轮。
-            <br />先做舒尔特方格热身 → N-Back核心训练 → Stroop收尾。
-          </div>
-        </div>
-      )}
-
-      {active === "schulte" && <SchulteGrid onBack={() => setActive(null)} history={schulteHistory} setHistory={setSchulteHistory} />}
-      {active === "nback" && <NBack onBack={() => setActive(null)} history={nbackHistory} setHistory={setNbackHistory} />}
-      {active === "stroop" && <Stroop onBack={() => setActive(null)} history={stroopHistory} setHistory={setStroopHistory} />}
-
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        button:hover { filter: brightness(1.08); }
-        button:active { transform: scale(0.97) !important; }
-        * { box-sizing: border-box; }
-      `}</style>
+        {active === "schulte" && (
+          <SchulteGrid
+            onBack={() => setActive(null)}
+            history={schulteHistory}
+            setHistory={setSchulteHistory}
+          />
+        )}
+        {active === "nback" && (
+          <NBack
+            onBack={() => setActive(null)}
+            history={nbackHistory}
+            setHistory={setNbackHistory}
+          />
+        )}
+        {active === "stroop" && (
+          <Stroop
+            onBack={() => setActive(null)}
+            history={stroopHistory}
+            setHistory={setStroopHistory}
+          />
+        )}
+      </main>
     </div>
   );
 }
