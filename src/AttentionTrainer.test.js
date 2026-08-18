@@ -64,7 +64,7 @@ describe("scoreNBackResponses", () => {
   });
 });
 
-describe("AttentionTrainer accessibility", () => {
+describe("AttentionTrainer accessibility and interactions", () => {
   let rendered;
 
   afterEach(() => {
@@ -98,6 +98,20 @@ describe("AttentionTrainer accessibility", () => {
     expect(rendered.container.textContent).toContain("2–4 分钟");
   });
 
+  test("toggles sound effects on and off", () => {
+    rendered = renderTrainer();
+
+    const soundBtn = rendered.container.querySelector(".sound-toggle-btn");
+    expect(soundBtn).toBeTruthy();
+    expect(soundBtn.textContent).toContain("音效 ON");
+
+    click(soundBtn);
+    expect(soundBtn.textContent).toContain("静音 OFF");
+
+    click(soundBtn);
+    expect(soundBtn.textContent).toContain("音效 ON");
+  });
+
   test("shows N-Back keyboard hint and disables difficulty buttons while running", () => {
     rendered = renderTrainer();
 
@@ -116,5 +130,19 @@ describe("AttentionTrainer accessibility", () => {
       expect(button.disabled).toBe(true);
       expect(button.getAttribute("aria-label")).toContain("训练中不可切换");
     });
+  });
+
+  test("navigates into Schulte Grid and returns back", () => {
+    rendered = renderTrainer();
+
+    click(rendered.container.querySelector('button[aria-label^="开始舒尔特方格训练"]'));
+    expect(rendered.container.textContent).toContain("舒尔特方格");
+    expect(rendered.container.textContent).toContain("扩大视觉注意范围");
+
+    const backBtn = rendered.container.querySelector('button[aria-label="返回专注控制台"]');
+    expect(backBtn).toBeTruthy();
+    click(backBtn);
+
+    expect(rendered.container.textContent).toContain("专注控制台");
   });
 });
